@@ -87,7 +87,18 @@ def delete_task(task_id: int):
     del tasks_db[task_id]
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    return app
+# ----------------------------------------------------------------------- TASK ADICIONAL --------------------------------------------------------------------------------------------  
 
+# Busca de tarefa por ID
+@app.get("/tasks/{task_id}")
+def get_task(task_id: int):
+    if task_id not in tasks_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Tarefa não encontrada"
+        )
+    return tasks_db[task_id]
+    
+    return app
 
 app = create_app()
