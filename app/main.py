@@ -68,6 +68,25 @@ def create_app(test_config=None):
             return jsonify(error="tarefa nao encontrada"), 404
         return jsonify(id=task_id, done=data["done"]), 200
 
+    from fastapi import FastAPI, HTTPException, Response, status
+
+# ----------------------------------------------------------------------- DELETE ----------------------------------------------------------------------------------------------------
+tasks_db = {
+    1: {"id": 1, "title": "Estudar CI/CD", "completed": False},
+    2: {"id": 2, "title": "Configurar EC2", "completed": False}
+}
+
+@app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_task(task_id: int):
+    if task_id not in tasks_db:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Tarefa não encontrada"
+        )
+    
+    del tasks_db[task_id]
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
     return app
 
 
