@@ -37,3 +37,27 @@ def test_mark_done(client):
 
 def test_not_found(client):
     assert client.patch("/tasks/999", json={"done": True}).status_code == 404
+
+# --- TESTES DO ENDPOINT DELETE ---
+
+def test_delete_task_success():
+    """ Teste de exclusão de tarefa existente (Esperado: 204) """
+    response = client.delete("/tasks/1")
+    assert response.status_code == 204
+    
+    response_get = client.get("/tasks/1")
+    assert response_get.status_code == 404
+
+def test_delete_task_not_found():
+    """ Teste de exclusão de tarefa inexistente """
+    response = client.delete("/tasks/9999")
+    assert response.status_code == 404
+
+
+# --- TESTE DA TASK ADICIONAL ---
+
+def test_get_task_by_id_success():
+    """ Teste de busca por ID existente """
+    response = client.get("/tasks/2")
+    assert response.status_code == 200
+    assert response.json()["id"] == 2
