@@ -1,0 +1,69 @@
+name: CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+
+permissions:
+  packages: write
+  contents: read
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Logar no GitHub Container Registry (GHCR)
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extrair tags (Versionamento por SHA)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: type=sha,format=long
+
+      - name: Build e Push da imagem para o GHCR
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+
+      - name: Deploy na EC2 via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            IMAGE_TAG="ghcr.io/${{ github.repository }}:sha-${{ github.sha }}"
+            
+            # Login no GHCR a partir da EC2
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+            
+            # Atualizar imagem e recriar contêiner preservando os dados no volume
+            docker pull $IMAGE_TAG
+            docker stop api-service || true
+            docker rm api-service || true
+            docker run -d \
+              --name api-service \
+              -p 80:8000 \
+              -v /home/ubuntu/app_data:/data \
+              $IMAGE_TAG
+
+      - name: Verificar Saúde da Aplicação (/health)
+        run: |
+          sleep 5
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://${{ secrets.EC2_HOST }}:8000/health)
+          if [ "$STATUS" -ne 200 ]; then
+            echo "Erro: Health check falhou com status HTTP $STATUS"
+            exit 1
+          fi
+          echo "Health check realizado com sucesso na EC2!"
