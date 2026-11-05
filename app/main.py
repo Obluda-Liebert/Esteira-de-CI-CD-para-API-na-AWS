@@ -20,12 +20,18 @@ def create_app(test_config=None):
         return db
 
     with connect() as db:
-        db.execute("CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0)")
+        db.execute(
+            "CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, done INTEGER NOT NULL DEFAULT 0)"
+        )
         db.commit()
 
     @app.get("/")
     def index():
-        return jsonify(service="cloud-tasks-api", message="API de tarefas em nuvem", endpoints=["/health", "/tasks"])
+        return jsonify(
+            service="cloud-tasks-api",
+            message="API de tarefas em nuvem",
+            endpoints=["/health", "/tasks"],
+        )
 
     @app.get("/health")
     def health():
@@ -39,13 +45,21 @@ def create_app(test_config=None):
     @app.get("/tasks")
     def list_tasks():
         with connect() as db:
-            items = db.execute("SELECT id, title, done FROM tasks ORDER BY id").fetchall()
-        return jsonify([dict(id=r["id"], title=r["title"], done=bool(r["done"])) for r in items])
+            items = db.execute(
+                "SELECT id, title, done FROM tasks ORDER BY id"
+            ).fetchall()
+        return jsonify(
+            [dict(id=r["id"], title=r["title"], done=bool(r["done"])) for r in items]
+        )
 
     @app.post("/tasks")
     def create_task():
         data = request.get_json(silent=True)
-        if not isinstance(data, dict) or not isinstance(data.get("title"), str) or not data["title"].strip():
+        if (
+            not isinstance(data, dict)
+            or not isinstance(data.get("title"), str)
+            or not data["title"].strip()
+        ):
             return jsonify(error="title deve ser texto nao vazio"), 400
         title = data["title"].strip()
         if len(title) > 120:
@@ -62,43 +76,40 @@ def create_app(test_config=None):
         if not isinstance(data, dict) or type(data.get("done")) is not bool:
             return jsonify(error="done deve ser booleano"), 400
         with connect() as db:
-            cursor = db.execute("UPDATE tasks SET done=? WHERE id=?", (int(data["done"]), task_id))
+            cursor = db.execute(
+                "UPDATE tasks SET done=? WHERE id=?", (int(data["done"]), task_id)
+            )
             db.commit()
         if not cursor.rowcount:
             return jsonify(error="tarefa nao encontrada"), 404
         return jsonify(id=task_id, done=data["done"]), 200
 
-    from fastapi import FastAPI, HTTPException, Response, status
+    # -------------------------------------------------------------------------IMPLEMENTAÇÃO DO DELETE ------------------------------------------------------------------------
+    @app.delete("/tasks/<int:task_id>")
+    def delete_task(task_id):
+        with connect() as db:
+            cursor = db.execute("DELETE FROM tasks WHERE id=?", (task_id,))
+            db.commit()
 
-# ----------------------------------------------------------------------- DELETE ----------------------------------------------------------------------------------------------------
-tasks_db = {
-    1: {"id": 1, "title": "Estudar CI/CD", "completed": False},
-    2: {"id": 2, "title": "Configurar EC2", "completed": False}
-}
+        if cursor.rowcount == 0:
+            return jsonify(error="tarefa nao encontrada"), 404
 
-@app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_task(task_id: int):
-    if task_id not in tasks_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Tarefa não encontrada"
-        )
-    
-    del tasks_db[task_id]
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
+        return "", 204
 
-# ----------------------------------------------------------------------- TASK ADICIONAL --------------------------------------------------------------------------------------------  
+    #---------------------------------------------------------------------- IMPLEMENTAÇÃO DE TASK ADICIONAL  -----------------------------------------------------------------------
+    @app.get("/tasks/<int:task_id>")
+    def get_task(task_id):
+        with connect() as db:
+            row = db.execute(
+                "SELECT id, title, done FROM tasks WHERE id=?", (task_id,)
+            ).fetchone()
 
-# Busca de tarefa por ID
-@app.get("/tasks/{task_id}")
-def get_task(task_id: int):
-    if task_id not in tasks_db:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, 
-            detail="Tarefa não encontrada"
-        )
-    return tasks_db[task_id]
-    
+        if not row:
+            return jsonify(error="tarefa nao encontrada"), 404
+
+        return jsonify(dict(id=row["id"], title=row["title"], done=bool(row["done"]))), 200
+
     return app
+
 
 app = create_app()
